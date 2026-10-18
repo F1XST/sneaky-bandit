@@ -77,6 +77,7 @@
   function showScreen(name) {
     $$('.screen').forEach((s) => s.classList.toggle('active', s.id === 'screen-' + name));
     G.screenName = name;
+    document.body.classList.toggle('in-game', name === 'game');
     A.musicPlay(true);
     A.setIntensity(name === 'game' ? 0.1 : 0.05);
   }

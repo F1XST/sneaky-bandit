@@ -9,12 +9,27 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css">
+  <script>
+    (function () {
+      function setH() { document.documentElement.style.setProperty('--app-h', window.innerHeight + 'px'); }
+      setH();
+      window.addEventListener('resize', setH);
+      window.addEventListener('orientationchange', function () { setTimeout(setH, 250); });
+    })();
+  </script>
 </head>
 <body>
 <div id="app">
 
   <!-- ============ TITLE ============ -->
   <section id="screen-title" class="screen active">
+    <div class="bg-fx" aria-hidden="true">
+      <i class="beam b1"></i><i class="beam b2"></i><i class="beam b3"></i>
+      <i class="mote" style="--x:8%;--d:0s;--s:9s"></i><i class="mote" style="--x:19%;--d:2s;--s:12s"></i>
+      <i class="mote" style="--x:31%;--d:5s;--s:10s"></i><i class="mote" style="--x:44%;--d:1s;--s:13s"></i>
+      <i class="mote" style="--x:57%;--d:4s;--s:9s"></i><i class="mote" style="--x:68%;--d:7s;--s:11s"></i>
+      <i class="mote" style="--x:79%;--d:3s;--s:14s"></i><i class="mote" style="--x:90%;--d:6s;--s:10s"></i>
+    </div>
     <div class="title-wrap">
       <div class="logo">
         <span class="logo-small" data-i18n="title.badge">ภารกิจโจรจอมย่อง</span>
@@ -107,11 +122,10 @@
       <div id="stamp" class="stamp"></div>
       <div id="tut" class="tut hidden"><span class="step" id="tutStep">1/5</span><span id="tutText"></span><button class="btn ghost small" id="tutSkip" data-i18n="tut.skip">ข้าม</button></div>
       <div id="overlay" class="overlay hidden"></div>
-
-      <div id="touch">
-        <div id="joy"><i id="joyKnob"></i></div>
-        <button id="btnSneak" class="sneak-btn">Shift</button>
-      </div>
+    </div>
+    <div id="touch">
+      <div id="joy"><i id="joyKnob"></i></div>
+      <button id="btnSneak" class="sneak-btn">Shift</button>
     </div>
     <div class="keys-hint" data-i18n="hint.keys"></div>
     <div class="rotate-hint" data-i18n="rotate.hint">หมุนจอเป็นแนวนอน</div>

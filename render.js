@@ -244,18 +244,45 @@
           c.fillRect(px, py + T - 3, T, 3);
         }
       }
+    // wall sconces: each one is also a light source used by the lighting pass
+    const cool = { bank: 1, vault: 1, office: 1, clinic: 1, command: 1, factory: 1 };
+    const lampRgb = cool[L.themeName] ? '190,220,255' : L.themeName === 'casino' ? '255,170,210' : '255,214,150';
+    const lamps = [];
+    const faceOK = (x, y) => { const ch = at(x, y); return ch !== '#' && ch !== 'E' && ch !== 'K'; };
+    for (let y = 0; y < L.h; y++)
+      for (let x = 0; x < L.w; x++) {
+        if (at(x, y) !== '#') continue;
+        const south = faceOK(x, y + 1) && y + 1 < L.h, north = faceOK(x, y - 1) && y > 0;
+        if (!south && !north) continue;
+        if ((x * 7 + y * 13) % 5 !== 0) continue;
+        const px = (x + 0.5) * T;
+        const py = south ? (y + 1) * T + 14 : y * T - 14;
+        if (lamps.some((l) => Math.hypot(l.x - px, l.y - py) < 120)) continue;
+        lamps.push({ x: px, y: py, r: 150, ph: rnd(x, y, 77) * 6.28, rgb: lampRgb, wx: px, wy: south ? (y + 1) * T - 5 : y * T + 6 });
+      }
+    lamps.forEach((l) => {
+      c.fillStyle = 'rgba(0,0,0,.45)'; c.fillRect(l.wx - 6, l.wy - 3, 12, 3);
+      ell(c, l.wx, l.wy, 5.5, 3.4, '#6b5a3a');
+      ell(c, l.wx, l.wy - 0.5, 4, 2.4, 'rgb(' + l.rgb + ')');
+    });
+    L.lamps = lamps;
     return cv;
   };
 
   /* ---------------- sprites ---------------- */
   const DEFAULT_LOOK = { shirt: '#2a2d43', stripe: '#eef0f6', skin: '#f1c9a0', cap: '#16161f' };
+  // shadow direction follows the nearest lamp (set by drawFrame before each sprite)
+  const SO = { x: 0, y: 0, sx: 1 };
+  function shadow(c, rx, ry, a) {
+    ell(c, SO.x, 4 + SO.y, rx * SO.sx, ry, 'rgba(0,0,0,' + a + ')');
+  }
   function drawThiefSprite(c, p, t, carried) {
     let look = p.look || DEFAULT_LOOK;
     const disguised = p.disguiseT > 0;
     if (disguised) look = { shirt: '#2f6fb0', stripe: '#2f6fb0', skin: look.skin, cap: '#244f80' };
     c.save();
     c.translate(p.x, p.y);
-    ell(c, 0, 4, 12, 8, 'rgba(0,0,0,.3)');
+    shadow(c, 12, 8, 0.34);
     if (p.shoesT > 0) {
       c.globalAlpha = 0.5 + Math.sin(t * 8) * 0.15;
       ell(c, 0, 5, 14, 9, 'rgba(120,200,255,.5)');
@@ -302,7 +329,7 @@
   function drawDogSprite(c, g, t) {
     c.save();
     c.translate(g.x, g.y);
-    ell(c, 0, 4, 14, 8, 'rgba(0,0,0,.3)');
+    shadow(c, 14, 8, 0.32);
     c.rotate(g.angle);
     const sw = g.moving ? Math.sin(g.walk * 0.3) * 4 : 0;
     ell(c, 6 + sw, -6, 3.4, 2.4, '#5a3a22');
@@ -336,7 +363,7 @@
     const u = UNI[g.type] || UNI.guard;
     c.save();
     c.translate(g.x, g.y);
-    ell(c, 0, 4, 13, 9, 'rgba(0,0,0,.3)');
+    shadow(c, 13, 9, 0.32);
     c.rotate(g.angle);
     const sw = g.moving ? Math.sin(g.walk * 0.2) * 3.5 : 0;
     ell(c, sw, -5.5, 5.5, 3.6, '#14141c');
@@ -391,22 +418,85 @@
   }
 
   /* ---------------- cones ---------------- */
-  function cone(c, L, g, range, fov, rgb, alpha) {
-    const n = 34;
-    c.beginPath();
-    c.moveTo(g.x, g.y);
+  // visibility polygon of a cone, clipped by walls
+  function conePts(L, g, range, fov) {
+    const n = 36, pts = [];
     for (let i = 0; i <= n; i++) {
       const a = g.angle - fov / 2 + (fov * i) / n;
       const d = SB.rayDist(L, g.x, g.y, a, range);
-      c.lineTo(g.x + Math.cos(a) * d, g.y + Math.sin(a) * d);
+      pts.push([g.x + Math.cos(a) * d, g.y + Math.sin(a) * d]);
     }
+    return pts;
+  }
+  function polyPath(c, g, pts, s) {
+    c.beginPath();
+    c.moveTo(g.x, g.y);
+    for (let i = 0; i < pts.length; i++) c.lineTo(g.x + (pts[i][0] - g.x) * s, g.y + (pts[i][1] - g.y) * s);
     c.closePath();
+  }
+  function cone(c, L, g, range, fov, rgb, alpha, pts) {
+    pts = pts || conePts(L, g, range, fov);
+    polyPath(c, g, pts, 1);
     const gr = c.createRadialGradient(g.x, g.y, 4, g.x, g.y, range);
     gr.addColorStop(0, 'rgba(' + rgb + ',' + alpha + ')');
     gr.addColorStop(0.7, 'rgba(' + rgb + ',' + alpha * 0.55 + ')');
     gr.addColorStop(1, 'rgba(' + rgb + ',0)');
     c.fillStyle = gr;
     c.fill();
+  }
+
+  /* ---------------- lighting ---------------- */
+  // soft white light sprite used both to cut holes in the darkness layer
+  // and (tinted) as an additive glow
+  let lightSprite = null;
+  const tinted = {};
+  function getLight() {
+    if (lightSprite) return lightSprite;
+    lightSprite = document.createElement('canvas');
+    lightSprite.width = lightSprite.height = 256;
+    const c = lightSprite.getContext('2d');
+    const g = c.createRadialGradient(128, 128, 0, 128, 128, 128);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.3, 'rgba(255,255,255,.62)');
+    g.addColorStop(0.62, 'rgba(255,255,255,.2)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g; c.fillRect(0, 0, 256, 256);
+    return lightSprite;
+  }
+  function getTinted(rgb) {
+    if (tinted[rgb]) return tinted[rgb];
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 256;
+    const c = cv.getContext('2d');
+    c.drawImage(getLight(), 0, 0);
+    c.globalCompositeOperation = 'source-in';
+    c.fillStyle = 'rgb(' + rgb + ')';
+    c.fillRect(0, 0, 256, 256);
+    tinted[rgb] = cv;
+    return cv;
+  }
+  let darkCv = null;
+  function getDark() {
+    if (!darkCv) { darkCv = document.createElement('canvas'); darkCv.width = SB.W; darkCv.height = SB.H; }
+    return darkCv;
+  }
+  function lighten(hex, k) {
+    const n = parseInt(hex.slice(1), 16);
+    const f = (v) => Math.round(v + (255 - v) * k);
+    return 'rgb(' + f(n >> 16) + ',' + f((n >> 8) & 255) + ',' + f(n & 255) + ')';
+  }
+  function nearestLamp(L, x, y) {
+    let best = null, bd = 260;
+    (L.lamps || []).forEach((l) => { const d = Math.hypot(l.x - x, l.y - y); if (d < bd) { bd = d; best = l; } });
+    return best ? { dx: x - best.x, dy: y - best.y, d: bd } : null;
+  }
+  function setShadow(L, x, y) {
+    const n = nearestLamp(L, x, y);
+    if (!n) { SO.x = 2; SO.y = 2; SO.sx = 1; return; }
+    const k = 5.5;
+    SO.x = (n.dx / n.d) * k;
+    SO.y = (n.dy / n.d) * k * 0.7;
+    SO.sx = 1 + Math.min(0.25, (260 - n.d) / 1000);
   }
 
   /* ---------------- loot / exit ---------------- */
@@ -739,6 +829,7 @@
       y: g.y,
       f: () => {
         if (g.state === 'asleep') c.globalAlpha = 0.72;
+        setShadow(L, g.x, g.y);
         drawGuardSprite(c, g, t);
         c.globalAlpha = 1;
       },
@@ -747,6 +838,7 @@
       y: p.y,
       f: () => {
         if (p.hidden) c.globalAlpha = 0.6;
+        setShadow(L, p.x, p.y);
         drawThiefSprite(c, p, t, G.carried);
         c.globalAlpha = 1;
       },
@@ -758,27 +850,86 @@
       drawPlant(c, h, t, covering);
     });
 
-    // night tint
+    // ---- lighting ----
+    // 1) colour grade (a softer version of the theme's night tint)
     c.globalCompositeOperation = 'multiply';
-    c.fillStyle = th.night;
+    c.fillStyle = lighten(th.night, 0.45);
     c.fillRect(0, 0, SB.W, SB.H);
     c.globalCompositeOperation = 'source-over';
 
-    // flashlight cones
+    // 2) darkness layer with holes cut out for every light source
+    const dk = getDark(), d = dk.getContext('2d');
+    const LS = getLight();
+    d.globalCompositeOperation = 'source-over';
+    d.globalAlpha = 1;
+    d.clearRect(0, 0, SB.W, SB.H);
+    d.fillStyle = 'rgba(4,6,22,' + (th.dark || 0.58) + ')';
+    d.fillRect(0, 0, SB.W, SB.H);
+    d.globalCompositeOperation = 'destination-out';
+    const flick = (ph) => 0.9 + Math.sin(t * 5 + ph) * 0.05 + Math.sin(t * 13 + ph * 2) * 0.03;
+    (L.lamps || []).forEach((l) => {
+      const r = l.r * flick(l.ph);
+      d.globalAlpha = 0.92;
+      d.drawImage(LS, l.x - r, l.y - r, r * 2, r * 2);
+    });
+    d.globalAlpha = 0.6;
+    d.drawImage(LS, p.x - 84, p.y - 84, 168, 168);
+    d.globalAlpha = 0.7;
+    G.loot.forEach((l) => { if (!l.got) d.drawImage(LS, l.x - 46, l.y - 46, 92, 92); });
+    G.keyItems.forEach((k) => { if (!k.got) d.drawImage(LS, k.x - 40, k.y - 40, 80, 80); });
+    if (G.loot.every((l) => l.got)) { const e = L.exit; d.drawImage(LS, (e.x + 0.5) * T - 70, (e.y + 0.5) * T - 70, 140, 140); }
+    d.globalAlpha = 1;
+    const guardPts = G.guards.map((g) => (g.state === 'asleep' || g.state === 'napping' ? null : conePts(L, g, g.rangeNow(G), g.fov)));
+    G.guards.forEach((g, i) => {
+      d.globalAlpha = 0.5;
+      d.drawImage(LS, g.x - 52, g.y - 52, 104, 104);
+      d.globalAlpha = 1;
+      const pts = guardPts[i];
+      if (!pts) return;
+      const range = g.rangeNow(G);
+      const gr = d.createRadialGradient(g.x, g.y, 4, g.x, g.y, range);
+      gr.addColorStop(0, 'rgba(0,0,0,.6)');
+      gr.addColorStop(0.7, 'rgba(0,0,0,.42)');
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      d.fillStyle = gr;
+      [1, 0.94, 0.88].forEach((s) => { polyPath(d, g, pts, s); d.fill(); });
+    });
+    G.cams.forEach((cam) => {
+      const pts = conePts(L, cam, cam.range, cam.fov);
+      const gr = d.createRadialGradient(cam.x, cam.y, 4, cam.x, cam.y, cam.range);
+      gr.addColorStop(0, 'rgba(0,0,0,.45)');
+      gr.addColorStop(1, 'rgba(0,0,0,0)');
+      d.fillStyle = gr;
+      [1, 0.92].forEach((s) => { polyPath(d, cam, pts, s); d.fill(); });
+    });
+    d.globalCompositeOperation = 'source-over';
+    c.drawImage(dk, 0, 0);
+
+    // 3) warm / cool glow of the lamps and the thief
     c.globalCompositeOperation = 'lighter';
+    (L.lamps || []).forEach((l) => {
+      const r = l.r * 0.9 * flick(l.ph);
+      c.globalAlpha = 0.2;
+      c.drawImage(getTinted(l.rgb), l.x - r, l.y - r, r * 2, r * 2);
+    });
+    c.globalAlpha = 0.1;
+    c.drawImage(getTinted('170,200,255'), p.x - 70, p.y - 70, 140, 140);
+    c.globalAlpha = 1;
+
+    // flashlight cones
     G.cams.forEach((cam) => {
       if (cam.cd > 0) cone(c, L, cam, cam.range, cam.fov, '255,40,40', 0.1 + (Math.sin(t * 14) > 0 ? 0.12 : 0));
       else cone(c, L, cam, cam.range, cam.fov, cam.meter > 0.1 ? '255,120,60' : '255,70,90', 0.2 + cam.meter * 0.15);
     });
-    G.guards.forEach((g) => {
+    G.guards.forEach((g, gi) => {
       if (g.state === 'asleep' || g.state === 'napping') return;
       const range = g.rangeNow(G);
-      let rgb = '255,240,170', a = 0.32;
-      if (g.type === 'dog') { rgb = '255,200,150'; a = 0.22; }
-      if (g.state === 'chase') { rgb = '255,90,80'; a = 0.38; }
-      else if (g.state === 'search') { rgb = '255,150,70'; a = 0.34; }
-      else if (g.meter > 0.18) { rgb = '255,200,80'; a = 0.36; }
-      cone(c, L, g, range, g.fov, rgb, a);
+      let rgb = '255,240,170', a = 0.3;
+      if (g.type === 'dog') { rgb = '255,200,150'; a = 0.2; }
+      if (g.state === 'chase') { rgb = '255,90,80'; a = 0.36; }
+      else if (g.state === 'search') { rgb = '255,150,70'; a = 0.32; }
+      else if (g.meter > 0.18) { rgb = '255,200,80'; a = 0.34; }
+      cone(c, L, g, range, g.fov, rgb, a, guardPts[gi]);
       const gl = c.createRadialGradient(g.x, g.y, 2, g.x, g.y, 40);
       gl.addColorStop(0, 'rgba(' + rgb + ',.25)'); gl.addColorStop(1, 'rgba(' + rgb + ',0)');
       c.fillStyle = gl; c.fillRect(g.x - 40, g.y - 40, 80, 80);
@@ -900,12 +1051,21 @@
     c.imageSmoothingQuality = 'high';
     c.drawImage(st, 0, 0, canvas.width, canvas.height);
     const sx = canvas.width / SB.W, sy = canvas.height / SB.H;
+    // mood lighting: darken, then cut a soft hole around every wall lamp
+    const dk = document.createElement('canvas');
+    dk.width = canvas.width; dk.height = canvas.height;
+    const d = dk.getContext('2d');
+    d.fillStyle = 'rgba(8,8,30,.5)'; d.fillRect(0, 0, dk.width, dk.height);
+    d.globalCompositeOperation = 'destination-out';
+    d.globalAlpha = 0.9;
+    (L.lamps || []).forEach((l) => { const r = l.r * sx; d.drawImage(getLight(), l.x * sx - r, l.y * sy - r, r * 2, r * 2); });
+    c.drawImage(dk, 0, 0);
     L.loot.forEach((l) => {
       c.fillStyle = '#ffd24a';
+      c.shadowColor = 'rgba(255,210,74,.9)'; c.shadowBlur = 6;
       c.beginPath(); c.arc((l.tx + 0.5) * T * sx, (l.ty + 0.5) * T * sy, 3, 0, TAU); c.fill();
+      c.shadowBlur = 0;
     });
-    c.fillStyle = 'rgba(40,40,80,.18)';
-    c.fillRect(0, 0, canvas.width, canvas.height);
   };
 
   SB.drawHero = function (c, w, h, t) {
@@ -917,14 +1077,28 @@
         floorTile(c, x, y, th);
         c.restore();
       }
-    c.fillStyle = 'rgba(20,16,50,.35)'; c.fillRect(0, 0, w, h);
     const g = { x: w * 0.68, y: h * 0.55, angle: Math.PI + Math.sin(t * 0.9) * 0.55, type: 'guard', moving: false, walk: 0 };
-    c.globalCompositeOperation = 'lighter';
-    cone(c, null, g, 190, SB.FOV, '255,240,170', 0.4);
-    c.globalCompositeOperation = 'source-over';
-    drawGuardSprite(c, g, t);
     const k = (t * 0.35) % 1;
     const p = { x: 40 + k * (w * 0.5), y: h * 0.55 + Math.sin(k * 14) * 18, angle: 0, sneaking: true, walk: t * 30 };
+    drawGuardSprite(c, g, t);
     drawThiefSprite(c, p, t, 2);
+    // darkness with the flashlight and a little halo around the thief cut out
+    if (!SB._heroDark) SB._heroDark = document.createElement('canvas');
+    const dk = SB._heroDark;
+    dk.width = w; dk.height = h;
+    const d = dk.getContext('2d');
+    d.fillStyle = 'rgba(6,8,26,.62)'; d.fillRect(0, 0, w, h);
+    d.globalCompositeOperation = 'destination-out';
+    const pts = conePts(null, g, 200, SB.FOV);
+    const gr = d.createRadialGradient(g.x, g.y, 4, g.x, g.y, 200);
+    gr.addColorStop(0, 'rgba(0,0,0,.95)'); gr.addColorStop(0.8, 'rgba(0,0,0,.6)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    d.fillStyle = gr;
+    [1, 0.94, 0.88].forEach((s) => { polyPath(d, g, pts, s); d.fill(); });
+    d.globalAlpha = 0.5; d.drawImage(getLight(), p.x - 60, p.y - 60, 120, 120);
+    d.globalAlpha = 0.45; d.drawImage(getLight(), g.x - 50, g.y - 50, 100, 100);
+    c.drawImage(dk, 0, 0);
+    c.globalCompositeOperation = 'lighter';
+    cone(c, null, g, 200, SB.FOV, '255,236,170', 0.28, pts);
+    c.globalCompositeOperation = 'source-over';
   };
 })();
