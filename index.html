@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#0e0d1f">
+  <title>Sneaky Bandit — ย่องเบา</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- ============ TITLE ============ -->
+  <section id="screen-title" class="screen active">
+    <div class="title-wrap">
+      <div class="logo">
+        <span class="logo-small" data-i18n="title.badge">ภารกิจโจรจอมย่อง</span>
+        <h1>SNEAKY<br><em>BANDIT</em></h1>
+      </div>
+      <canvas id="hero" width="520" height="150"></canvas>
+      <p class="tagline" data-i18n="title.tagline"></p>
+      <div class="btn-col">
+        <button class="btn primary big" id="btnPlay" data-i18n="btn.play">เริ่มเล่น</button>
+        <button class="btn" id="btnHow" data-i18n="btn.how">วิธีเล่น</button>
+        <button class="btn ghost" id="btnSettings" data-i18n="btn.settings">ตั้งค่า</button>
+      </div>
+      <p class="credit" data-i18n="title.credit"></p>
+    </div>
+
+    <div class="modal hidden" id="howModal">
+      <div class="card wide">
+        <h2 data-i18n="how.title">วิธีเล่น</h2>
+        <div class="how-grid">
+          <div><b data-i18n="how.move"></b><span data-i18n="how.move.d"></span></div>
+          <div><b data-i18n="how.sneak"></b><span data-i18n="how.sneak.d"></span></div>
+          <div><b data-i18n="how.throw"></b><span data-i18n="how.throw.d"></span></div>
+          <div><b data-i18n="how.use"></b><span data-i18n="how.use.d"></span></div>
+          <div><b data-i18n="how.hide"></b><span data-i18n="how.hide.d"></span></div>
+          <div><b data-i18n="how.ai"></b><span data-i18n="how.ai.d"></span></div>
+          <div><b data-i18n="how.pause"></b><span data-i18n="how.pause.d"></span></div>
+        </div>
+        <ul class="tips">
+          <li data-i18n="how.tip1"></li><li data-i18n="how.tip2"></li><li data-i18n="how.tip3"></li>
+          <li data-i18n="how.tip4"></li><li data-i18n="how.tip5"></li><li data-i18n="how.tip6"></li>
+        </ul>
+        <button class="btn primary" data-close="howModal" data-i18n="how.ok">เข้าใจแล้ว</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LEVEL SELECT ============ -->
+  <section id="screen-levels" class="screen">
+    <div class="levels-head">
+      <button class="btn ghost small" id="btnBackTitle" data-i18n="btn.back">‹ กลับ</button>
+      <h2 data-i18n="levels.title">เลือกภารกิจ</h2>
+      <div class="total-stars"><span id="totalStars">0</span> / 60 ★</div>
+    </div>
+    <div class="levels-tools">
+      <button class="btn small" id="btnShop"><span class="i-coin"></span> <span id="coinCount">0</span> · <span data-i18n="btn.shop">ร้านค้า</span></button>
+      <button class="btn small" id="btnEndless">🔁 <span data-i18n="btn.endless">โหมดสุ่มไม่จบ</span> (<span id="endlessBest">0</span>)</button>
+      <button class="btn small" id="btnScores" data-i18n="btn.scores">สถิติ</button>
+      <button class="btn small ghost" id="btnSettings2" data-i18n="btn.settings">ตั้งค่า</button>
+    </div>
+    <div id="levelGrid"></div>
+  </section>
+
+  <!-- ============ SHOP ============ -->
+  <section id="screen-shop" class="screen">
+    <div class="levels-head">
+      <button class="btn ghost small" id="btnShopBack" data-i18n="btn.back">‹ กลับ</button>
+      <h2 data-i18n="shop.title">ร้านค้า</h2>
+      <div class="total-stars"><span class="i-coin"></span> <span id="shopCoins">0</span></div>
+    </div>
+    <div class="shop-wrap">
+      <h3 data-i18n="shop.chars">ตัวละคร</h3>
+      <div id="charList"></div>
+      <h3 data-i18n="shop.upgrades">อัปเกรดถาวร</h3>
+      <div id="upgList"></div>
+    </div>
+  </section>
+
+  <!-- ============ GAME ============ -->
+  <section id="screen-game" class="screen">
+    <div class="hud">
+      <button class="icon-btn" id="btnMenu" data-i18n-title="pause.menu">☰</button>
+      <div class="hud-level"><small><span data-i18n="hud.level">ด่าน</span> <span id="hudNum">1</span></small><b id="hudName">-</b></div>
+      <div class="hud-timer">
+        <div class="bar"><i id="timerFill"></i></div>
+        <span id="timerText">0:00</span>
+      </div>
+      <div class="chip" title="💰"><span class="ico">💰</span><b id="hudLoot">0/0</b></div>
+      <div class="chip hidden" id="keyChip"><span class="ico">🔑</span><b id="hudKeys">0</b></div>
+      <div class="chip"><span class="ico"><span class="i-coin"></span></span><b id="hudCoins">0</b></div>
+      <div class="chip hidden" id="rushChip"><span class="ico">🚓</span><b id="hudRush">0:40</b></div>
+      <div class="tools" id="tools"></div>
+      <div class="chip"><span class="ico">🚨</span><span id="alertPips"><i></i><i></i><i></i></span></div>
+      <button class="icon-btn txt" id="btnAI" title="AI (Tab)">AI</button>
+      <button class="icon-btn" id="btnPause">❚❚</button>
+    </div>
+
+    <div class="stage" id="stage">
+      <canvas id="cv" width="936" height="576"></canvas>
+      <div id="toast" class="toast"></div>
+      <div id="stamp" class="stamp"></div>
+      <div id="tut" class="tut hidden"><span class="step" id="tutStep">1/5</span><span id="tutText"></span><button class="btn ghost small" id="tutSkip" data-i18n="tut.skip">ข้าม</button></div>
+      <div id="overlay" class="overlay hidden"></div>
+
+      <div id="touch">
+        <div id="joy"><i id="joyKnob"></i></div>
+        <button id="btnSneak" class="sneak-btn">Shift</button>
+      </div>
+    </div>
+    <div class="keys-hint" data-i18n="hint.keys"></div>
+    <div class="rotate-hint" data-i18n="rotate.hint">หมุนจอเป็นแนวนอน</div>
+
+    <div class="modal hidden" id="sumModal">
+      <div class="card sum-card">
+        <h2 data-i18n="sum.modal.title">สรุปหลังจบด่าน</h2>
+        <canvas id="summaryCv"></canvas>
+        <p class="ctrl-note" data-i18n="sum.legend.player"></p>
+        <div class="row">
+          <button class="btn" id="btnSumSave" data-i18n="btn.save">บันทึกเป็นรูป</button>
+          <button class="btn primary" data-close="sumModal" data-i18n="btn.close">ปิด</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ shared modals ============ -->
+  <div class="modal hidden" id="settingsModal">
+    <div class="card">
+      <h2 data-i18n="set.title">ตั้งค่า</h2>
+      <div id="settingsBody"></div>
+      <button class="btn primary" data-close="settingsModal" data-i18n="btn.close">ปิด</button>
+    </div>
+  </div>
+  <div class="modal hidden" id="scoresModal">
+    <div class="card wide">
+      <h2 data-i18n="scores.title">สถิติของคุณ</h2>
+      <div id="scoresBody"></div>
+      <button class="btn primary" data-close="scoresModal" data-i18n="btn.close">ปิด</button>
+    </div>
+  </div>
+</div>
+
+<script src="js/world.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/meta.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/levelgen.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/guard.js"></script>
+<script src="js/render.js"></script>
+<script src="js/summary.js"></script>
+<script src="js/game.js"></script>
+</body>
+</html>
